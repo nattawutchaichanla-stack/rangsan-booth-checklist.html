@@ -1335,6 +1335,45 @@
   @media(max-width:860px){
     .sv-table{display:block;overflow-x:auto;white-space:nowrap;}
   }
+  /* ===== Staff event selector ===== */
+  .staff-events-wrap{margin-bottom:16px;}
+  .staff-events-label{
+    font-family:'Sarabun',sans-serif;font-size:12px;color:var(--muted);
+    margin-bottom:7px;letter-spacing:.02em;
+  }
+  .staff-events-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .staff-event-pill{
+    display:flex;align-items:center;gap:7px;cursor:pointer;
+    background:var(--card);border:2px solid transparent;
+    border-radius:999px;padding:7px 12px;
+    font-family:'Sarabun',sans-serif;font-size:13px;color:var(--ink-soft);
+    transition:all .12s;
+  }
+  .staff-event-pill:hover{border-color:var(--sage-soft);}
+  .staff-event-pill.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .staff-event-pill .sev-count{
+    font-family:'Courier Prime',monospace;font-size:11px;
+    background:rgba(0,0,0,0.08);border-radius:999px;padding:1px 7px;min-width:16px;text-align:center;
+  }
+  .staff-event-pill.active .sev-count{background:rgba(255,255,255,0.22);}
+  .sev-edit{
+    background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;
+    font-size:15px;padding:0 2px;line-height:1;
+  }
+  .sev-edit:hover{color:#fff;}
+  .staff-event-add{
+    background:transparent;border:1.5px dashed var(--muted);
+    border-radius:999px;padding:7px 12px;cursor:pointer;
+    font-family:'Sarabun',sans-serif;font-size:12.5px;color:var(--muted);
+  }
+  .staff-event-add:hover{border-color:var(--sage);color:var(--sage-dark);}
+  .prompt-input{
+    width:100%;box-sizing:border-box;margin:14px 0 4px;
+    font-family:'Sarabun',sans-serif;font-size:15px;color:var(--ink);
+    background:var(--paper);border:1px solid rgba(28,27,25,0.15);
+    border-radius:10px;padding:11px 13px;
+  }
+  .prompt-input:focus{outline:none;border-color:var(--terra);background:#fff;}
 </style>
 </head>
 <body>
@@ -1438,7 +1477,12 @@
   </div>
 
   <div id="panel-staff" style="display:none;">
-    <div class="staff-intro">เพิ่มพนักงานที่จะไปออกบูธ ระบุวันที่ ช่วงเวลา และชื่อ ระบบจัดเป็นตารางให้อัตโนมัติ</div>
+    <div class="staff-intro">เลือกงานที่จะจัดเวร แล้วเพิ่มพนักงาน ระบุวันที่/เวลา/ชื่อ — แต่ละงานมีตารางแยกกัน ไม่กระทบงานอื่น</div>
+
+    <div class="staff-events-wrap">
+      <div class="staff-events-label">📋 เลือกงาน</div>
+      <div id="staff-events-bar" class="staff-events-bar"></div>
+    </div>
 
     <div class="stats-row" id="staff-stats-row">
       <div class="stat-card">
@@ -2153,6 +2197,29 @@
   </div>
 </div>
 
+<div id="prompt-overlay" class="confirm-overlay" style="display:none;">
+  <div class="confirm-box">
+    <div class="confirm-msg" id="prompt-title"></div>
+    <input type="text" id="prompt-input" class="prompt-input" placeholder="">
+    <div class="confirm-actions">
+      <button id="prompt-cancel-btn" class="confirm-btn cancel">ยกเลิก</button>
+      <button id="prompt-ok-btn" class="confirm-btn ok">ตกลง</button>
+    </div>
+  </div>
+</div>
+
+<div id="evedit-overlay" class="confirm-overlay" style="display:none;">
+  <div class="confirm-box">
+    <div class="confirm-msg" id="evedit-title">แก้ไขงาน</div>
+    <input type="text" id="evedit-input" class="prompt-input" placeholder="ชื่องาน">
+    <div class="confirm-actions" style="flex-wrap:wrap;">
+      <button id="evedit-delete-btn" class="confirm-btn danger">🗑 ลบงานนี้</button>
+      <button id="evedit-cancel-btn" class="confirm-btn cancel">ยกเลิก</button>
+      <button id="evedit-save-btn" class="confirm-btn ok">บันทึกชื่อ</button>
+    </div>
+  </div>
+</div>
+
 <div id="pdf-preview-overlay" class="confirm-overlay" style="display:none;">
   <div class="pdf-preview-box">
     <div class="pdf-preview-scroll">
@@ -2555,6 +2622,7 @@ const BUDGET_KEY = "rangsan-booth-budget-v1";
 const ITEM_COSTS_KEY = "rangsan-booth-item-costs-v1";
 const ITEM_QTYS_KEY = "rangsan-booth-item-qtys-v1";
 const STAFF_KEY = "rangsan-booth-staff-v1";
+const STAFF_EVENTS_KEY = "rangsan-booth-staff-events-v1";
 const SURVEY_KEY = "rangsan-booth-survey-v1";
 
 let checked = {};
@@ -2569,6 +2637,14 @@ let itemCosts = {};
 let itemQtys = {};
 let surveyData = {};
 let staff = [];
+let staffEvents = [];
+let currentStaffEventId = null;
+const STAFF_EVENTS_SEED = [
+  { id:"ev_seacon", name:"Seacon Bangkae (22 ก.ค.–2 ส.ค.)" },
+  { id:"ev_taladchic", name:"Talad Chic (4 วัน)" },
+  { id:"ev_training", name:"เทรนนิ่ง 30 ส.ค." }
+];
+function curStaff(){ return staff.filter(s => (s.eventId || "ev_seacon") === currentStaffEventId); }
 const STAFF_SEED_DATA = [
   { id:"st_seed1", date:"21 ก.ค. 69", time:"21:00-24:00", name:"พี่เฟิร์ส", role:"บาริสต้า (สกัดกาแฟ)", status:"pending" },
   { id:"st_seed2", date:"21 ก.ค. 69", time:"21:00-24:00", name:"พี่น้ำแข็ง", role:"ถ่ายคอนเทนต์ / แคชเชียร์", status:"pending" },
@@ -3151,6 +3227,61 @@ async function saveStaff(){
   await setStorageWithRetry(STAFF_KEY, JSON.stringify(staff), "ทีมงาน");
 }
 
+async function saveStaffEvents(){
+  await setStorageWithRetry(STAFF_EVENTS_KEY, JSON.stringify({events:staffEvents, current:currentStaffEventId}), "งานทีมงาน");
+}
+
+function renderStaffEvents(){
+  const el = document.getElementById("staff-events-bar");
+  if(!el) return;
+  el.innerHTML = staffEvents.map(ev => {
+    const n = staff.filter(s => (s.eventId||"ev_seacon") === ev.id).length;
+    const active = ev.id === currentStaffEventId;
+    return `<div class="staff-event-pill ${active?'active':''}" data-evpill="${ev.id}">
+      <span class="sev-name">${ev.name}</span>
+      <span class="sev-count">${n}</span>
+      ${active ? `<button class="sev-edit" data-evedit="${ev.id}" title="แก้ชื่อ/ลบงาน">⋯</button>` : ''}
+    </div>`;
+  }).join("") + `<button class="staff-event-add" id="staff-event-add">+ เพิ่มงาน</button>`;
+
+  el.querySelectorAll("[data-evpill]").forEach(p=>{
+    p.addEventListener("click", (e)=>{
+      if(e.target.closest("[data-evedit]")) return;
+      currentStaffEventId = p.dataset.evpill;
+      saveStaffEvents();
+      renderStaffEvents(); renderStaff();
+    });
+  });
+  el.querySelectorAll("[data-evedit]").forEach(b=>{
+    b.addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      const ev = staffEvents.find(x=>x.id===b.dataset.evedit);
+      if(!ev) return;
+      const choice = await showEventEditModal(ev);
+      if(choice && choice.action==="rename" && choice.name){
+        ev.name = choice.name; await saveStaffEvents(); renderStaffEvents();
+      } else if(choice && choice.action==="delete"){
+        if(staffEvents.length<=1){ showBackupNote("ต้องมีอย่างน้อย 1 งาน"); return; }
+        staff = staff.filter(s => (s.eventId||"ev_seacon") !== ev.id);
+        staffEvents = staffEvents.filter(x=>x.id!==ev.id);
+        if(currentStaffEventId===ev.id) currentStaffEventId = staffEvents[0].id;
+        await saveStaff(); await saveStaffEvents();
+        renderStaffEvents(); renderStaff();
+      }
+    });
+  });
+  const addBtn = document.getElementById("staff-event-add");
+  if(addBtn) addBtn.addEventListener("click", async ()=>{
+    const name = await showPromptModal("ชื่องานใหม่", "เช่น งานตลาดนัด ABC");
+    if(!name) return;
+    const id = "ev_" + Date.now();
+    staffEvents.push({ id, name });
+    currentStaffEventId = id;
+    await saveStaffEvents();
+    renderStaffEvents(); renderStaff();
+  });
+}
+
 const GROUP_PALETTE = [
   { band:"#df7a6d", bandText:"#ffffff", tint:"#f8dad4" },
   { band:"#e8c14a", bandText:"#ffffff", tint:"#f7ecc2" },
@@ -3181,7 +3312,7 @@ function renderStaffQuickDates(){
   const el = document.getElementById("staff-quickdates");
   if(!el) return;
   const countByDate = {};
-  staff.forEach(s => { countByDate[s.date] = (countByDate[s.date]||0)+1; });
+  curStaff().forEach(s => { countByDate[s.date] = (countByDate[s.date]||0)+1; });
   el.innerHTML = EVENT_DATE_RANGE.map(d => `
     <button class="staff-date-chip ${countByDate[d] ? 'has-people':''}" data-quickdate="${d}">${d}${countByDate[d] ? ' ('+countByDate[d]+')':''}</button>
   `).join("");
@@ -3252,7 +3383,8 @@ function renderStaffDashboard(){
   const tableEl = document.getElementById("staff-dashboard-table");
   if(!tableEl) return;
 
-  if(!staff.length){
+  const src = curStaff();
+  if(!src.length){
     if(statDays) statDays.textContent = "0";
     if(statShifts) statShifts.textContent = "0";
     if(statPeople) statPeople.textContent = "0";
@@ -3262,10 +3394,10 @@ function renderStaffDashboard(){
     return;
   }
 
-  const uniqueDays = new Set(staff.map(s => s.date));
+  const uniqueDays = new Set(src.map(s => s.date));
   const byPerson = {};
   const byPersonRoles = {};
-  staff.forEach(s => {
+  src.forEach(s => {
     if(!byPerson[s.name]) byPerson[s.name] = [];
     byPerson[s.name].push(s.date);
     if(s.role){
@@ -3281,7 +3413,7 @@ function renderStaffDashboard(){
   }
 
   if(statDays) statDays.textContent = uniqueDays.size;
-  if(statShifts) statShifts.textContent = staff.length;
+  if(statShifts) statShifts.textContent = src.length;
   if(statPeople) statPeople.textContent = Object.keys(byPerson).length;
 
   const sortedNames = Object.keys(byPerson).sort((a,b) => byPerson[b].length - byPerson[a].length);
@@ -3330,9 +3462,10 @@ function renderStaffDashboard(){
 }
 
 function buildStaffDashboardData(){
-  const uniqueDays = new Set(staff.map(s => s.date));
+  const src = curStaff();
+  const uniqueDays = new Set(src.map(s => s.date));
   const byPerson = {};
-  staff.forEach(s => {
+  src.forEach(s => {
     if(!byPerson[s.name]) byPerson[s.name] = [];
     byPerson[s.name].push(s.date);
   });
@@ -3417,17 +3550,19 @@ document.getElementById("staff-schedule-pdf-btn").addEventListener("click", ()=>
 function renderStaff(){
   const el = document.getElementById("staff-list");
   if(!el) return;
+  renderStaffEvents();
   renderStaffQuickDates();
   renderStaffDashboard();
 
-  if(!staff.length){
-    el.innerHTML = `<div class="bdash-empty">ยังไม่มีการวางคนไปออกบูธ — เพิ่มด้านบนได้เลย</div>`;
+  const src = curStaff();
+  if(!src.length){
+    el.innerHTML = `<div class="bdash-empty">ยังไม่มีการวางคนในงานนี้ — เพิ่มด้านบนได้เลย</div>`;
     return;
   }
 
   const byDate = {};
   const order = [];
-  staff.forEach(s => {
+  src.forEach(s => {
     if(!s.status) s.status = "pending";
     const key = s.date || "ยังไม่ระบุวันที่";
     if(!byDate[key]){ byDate[key] = []; order.push(key); }
@@ -3528,7 +3663,7 @@ document.getElementById("new-staff-btn").addEventListener("click", async ()=>{
   const role = roleInput.value.trim();
   const name = nameInput.value.trim();
   if(!date || !name) return;
-  staff.push({ id: "st" + Date.now(), date, time, role, name });
+  staff.push({ id: "st" + Date.now(), date, time, role, name, eventId: currentStaffEventId });
   timeInput.value = "";
   roleInput.value = "";
   nameInput.value = "";
@@ -4360,6 +4495,34 @@ async function loadAll(){
 
     if(addedSeed || removedSeed || migratedTime || migratedName || migratedRole) await saveStaff();
   }catch(e){ staff = staff || []; }
+
+  // ---- staff events: load, seed, and migrate legacy shifts to Seacon ----
+  try{
+    const resEv = await window.storage.get(STAFF_EVENTS_KEY, true);
+    if(resEv && resEv.value){
+      const parsed = JSON.parse(resEv.value);
+      staffEvents = parsed.events || [];
+      currentStaffEventId = parsed.current || null;
+    }
+  }catch(e){ staffEvents = staffEvents || []; }
+  let evChanged = false;
+  if(!staffEvents.length){
+    staffEvents = STAFF_EVENTS_SEED.map(e => ({...e}));
+    evChanged = true;
+  } else {
+    // ensure seed events exist (add any missing without duplicating)
+    STAFF_EVENTS_SEED.forEach(seed => {
+      if(!staffEvents.some(e => e.id === seed.id)){ staffEvents.push({...seed}); evChanged = true; }
+    });
+  }
+  if(!currentStaffEventId || !staffEvents.some(e => e.id === currentStaffEventId)){
+    currentStaffEventId = staffEvents[0].id; evChanged = true;
+  }
+  let migratedEvent = false;
+  staff.forEach(s => { if(!s.eventId){ s.eventId = "ev_seacon"; migratedEvent = true; } });
+  if(migratedEvent) await saveStaff();
+  if(evChanged) await saveStaffEvents();
+
   renderSections();
   renderTimeline();
   renderHistory();
@@ -4531,6 +4694,70 @@ function showConfirmModal(message){
     function onOverlay(e){ if(e.target === overlay) cleanup(false); }
 
     okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
+
+function showPromptModal(title, placeholder, initial){
+  return new Promise((resolve)=>{
+    const overlay = document.getElementById("prompt-overlay");
+    const titleEl = document.getElementById("prompt-title");
+    const input = document.getElementById("prompt-input");
+    const okBtn = document.getElementById("prompt-ok-btn");
+    const cancelBtn = document.getElementById("prompt-cancel-btn");
+    titleEl.textContent = title;
+    input.placeholder = placeholder || "";
+    input.value = initial || "";
+    overlay.style.display = "flex";
+    setTimeout(()=>input.focus(), 50);
+    function cleanup(result){
+      overlay.style.display = "none";
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      input.removeEventListener("keydown", onKey);
+      resolve(result);
+    }
+    function onOk(){ cleanup(input.value.trim() || null); }
+    function onCancel(){ cleanup(null); }
+    function onOverlay(e){ if(e.target === overlay) cleanup(null); }
+    function onKey(e){ if(e.key==="Enter") onOk(); if(e.key==="Escape") onCancel(); }
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+    input.addEventListener("keydown", onKey);
+  });
+}
+
+function showEventEditModal(ev){
+  return new Promise((resolve)=>{
+    const overlay = document.getElementById("evedit-overlay");
+    const input = document.getElementById("evedit-input");
+    const saveBtn = document.getElementById("evedit-save-btn");
+    const delBtn = document.getElementById("evedit-delete-btn");
+    const cancelBtn = document.getElementById("evedit-cancel-btn");
+    input.value = ev.name;
+    overlay.style.display = "flex";
+    setTimeout(()=>input.focus(), 50);
+    function cleanup(result){
+      overlay.style.display = "none";
+      saveBtn.removeEventListener("click", onSave);
+      delBtn.removeEventListener("click", onDel);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onSave(){ cleanup({action:"rename", name:input.value.trim()}); }
+    async function onDel(){
+      overlay.style.display = "none";
+      const ok = await showConfirmModal("ลบงาน \""+ev.name+"\" และตารางเวรทั้งหมดของงานนี้?");
+      cleanup(ok ? {action:"delete"} : null);
+    }
+    function onCancel(){ cleanup(null); }
+    function onOverlay(e){ if(e.target === overlay) cleanup(null); }
+    saveBtn.addEventListener("click", onSave);
+    delBtn.addEventListener("click", onDel);
     cancelBtn.addEventListener("click", onCancel);
     overlay.addEventListener("click", onOverlay);
   });
