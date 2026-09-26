@@ -1374,6 +1374,56 @@
     border-radius:10px;padding:11px 13px;
   }
   .prompt-input:focus{outline:none;border-color:var(--terra);background:#fff;}
+  /* ===== Staff roster quick-pick ===== */
+  .staff-datepick{margin-bottom:12px;}
+  .staff-date-main{
+    width:100%;box-sizing:border-box;margin-bottom:8px;
+    font-family:'Sarabun',sans-serif;font-size:15px;color:var(--ink);
+    background:var(--card);border:2px solid var(--sage-soft);
+    border-radius:12px;padding:12px 14px;
+  }
+  .staff-date-main:focus{outline:none;border-color:var(--sage);background:#fff;}
+  .staff-date-chip.sel{background:var(--sage)!important;color:#fff!important;border-color:var(--sage)!important;}
+  .staff-roster-wrap{
+    background:var(--sage-soft);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:12px;
+  }
+  .staff-roster-label{
+    font-family:'Sarabun',sans-serif;font-size:13px;color:var(--sage-dark);
+    font-weight:600;margin-bottom:10px;
+  }
+  .staff-roster{display:flex;flex-wrap:wrap;gap:8px;}
+  .roster-chip{
+    display:flex;align-items:center;gap:7px;cursor:pointer;
+    background:#fff;border:2px solid transparent;border-radius:999px;
+    padding:6px 12px 6px 6px;
+    font-family:'Sarabun',sans-serif;font-size:14px;color:var(--ink);
+    box-shadow:var(--shadow-sm);transition:all .12s;
+  }
+  .roster-chip:hover{transform:translateY(-1px);border-color:var(--sage);}
+  .roster-av{
+    width:26px;height:26px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:700;font-size:13px;
+  }
+  .roster-mark{
+    font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--sage);
+    width:16px;text-align:center;
+  }
+  .roster-chip.added{background:var(--sage);color:#fff;border-color:var(--sage);}
+  .roster-chip.added .roster-mark{color:#fff;}
+  .roster-chip.add{
+    background:transparent;border:1.5px dashed var(--sage-dark);
+    color:var(--sage-dark);padding:6px 14px;font-size:13px;box-shadow:none;
+  }
+  .staff-manual{margin-bottom:16px;}
+  .staff-manual>summary{
+    cursor:pointer;font-family:'Sarabun',sans-serif;font-size:12.5px;
+    color:var(--muted);padding:6px 2px;list-style:none;
+  }
+  .staff-manual>summary::-webkit-details-marker{display:none;}
+  .staff-manual>summary:hover{color:var(--ink);}
+  .staff-manual[open]>summary{color:var(--ink);font-weight:600;margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -1508,15 +1558,25 @@
       <div id="staff-dashboard-table"></div>
     </div>
 
-    <div class="staff-quickdates" id="staff-quickdates"></div>
-
-    <div class="add-section-card tl staff-add-form">
-      <input type="text" id="new-staff-date" placeholder="วันที่ เช่น 21 ก.ค. 69">
-      <input type="text" id="new-staff-time" placeholder="ช่วงเวลา เช่น 20:00-22:00">
-      <input type="text" id="new-staff-role" placeholder="ตำแหน่ง เช่น บาริสต้า">
-      <input type="text" id="new-staff-name" placeholder="ชื่อพนักงาน">
-      <button id="new-staff-btn">+ เพิ่ม</button>
+    <div class="staff-datepick">
+      <input type="text" id="new-staff-date" class="staff-date-main" placeholder="📅 เลือกหรือพิมพ์วันที่ที่จะจัดคน...">
+      <div class="staff-quickdates" id="staff-quickdates"></div>
     </div>
+
+    <div class="staff-roster-wrap">
+      <div class="staff-roster-label">👆 แตะเลือกพนักงาน (เพิ่มเข้าวันที่ด้านบนทันที)</div>
+      <div id="staff-roster" class="staff-roster"></div>
+    </div>
+
+    <details class="staff-manual">
+      <summary>⚙️ ตั้งค่าเพิ่มเติม / เพิ่มคนนอกรายชื่อ</summary>
+      <div class="add-section-card tl staff-add-form">
+        <input type="text" id="new-staff-time" placeholder="ช่วงเวลา เช่น 09:00-20:30 (ใส่ครั้งเดียว ใช้ทุกคน)">
+        <input type="text" id="new-staff-role" placeholder="ตำแหน่ง (เว้นไว้ = เติมอัตโนมัติตามคน)">
+        <input type="text" id="new-staff-name" placeholder="ชื่อพนักงาน (กรณีคนนอกรายชื่อ)">
+        <button id="new-staff-btn">+ เพิ่ม</button>
+      </div>
+    </details>
 
     <div class="bdash-title-row">
       <div class="budget-dashboard-title">📋 ตารางเข้างานทั้งหมด</div>
@@ -2645,6 +2705,68 @@ const STAFF_EVENTS_SEED = [
   { id:"ev_training", name:"เทรนนิ่ง 30 ส.ค." }
 ];
 function curStaff(){ return staff.filter(s => (s.eventId || "ev_seacon") === currentStaffEventId); }
+let staffRoster = [];
+const STAFF_ROSTER_KEY = "rangsan-booth-staff-roster-v1";
+const STAFF_ROSTER_SEED = ["พี่ตั้ม","พี่โจ","น้องแสตมป์","น้องหมวย","พี่เซนต์","พี่น้ำแข็ง","พี่เฟิร์ส","น้องปลายฝน"];
+const ROLE_MAP = {
+  "พี่น้ำแข็ง": "ถ่ายคอนเทนต์ / แคชเชียร์",
+  "พี่เซนต์": "บาริสต้า (ผสมเครื่องดื่ม)",
+  "น้องแสตมป์": "บาริสต้า (สกัดกาแฟ)",
+  "น้องหมวย": "บาริสต้า (สกัดกาแฟ)",
+  "น้องปลายฝน": "บาริสต้า (สกัดกาแฟ)",
+  "พี่เฟิร์ส": "บาริสต้า (สกัดกาแฟ)",
+  "พี่โจ": "แคชเชียร์ / สกัดกาแฟ",
+  "พี่ตั้ม": "บาริสต้า"
+};
+async function saveStaffRoster(){
+  await setStorageWithRetry(STAFF_ROSTER_KEY, JSON.stringify(staffRoster), "รายชื่อพนักงาน");
+}
+function renderStaffRoster(){
+  const el = document.getElementById("staff-roster");
+  if(!el) return;
+  const dateInput = document.getElementById("new-staff-date");
+  const curDate = (dateInput && dateInput.value.trim()) || "";
+  const onDate = new Set(curStaff().filter(s => s.date === curDate).map(s => s.name));
+  el.innerHTML = staffRoster.map(name => {
+    const added = curDate && onDate.has(name);
+    return `<button class="roster-chip ${added?'added':''}" data-roster="${name}" title="${added?'อยู่ในวันนี้แล้ว':'แตะเพื่อเพิ่มเข้าวันที่เลือก'}">
+      <span class="roster-av" style="background:${avatarColorFor(name)}">${name.trim().charAt(0)}</span>
+      <span class="roster-nm">${name}</span>
+      <span class="roster-mark">${added?'✓':'+'}</span>
+    </button>`;
+  }).join("") + `<button class="roster-chip add" id="roster-add-btn" title="เพิ่มชื่อพนักงานใหม่">+ เพิ่มชื่อ</button>`;
+
+  el.querySelectorAll("[data-roster]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const name = btn.dataset.roster;
+      const di = document.getElementById("new-staff-date");
+      const ti = document.getElementById("new-staff-time");
+      const ri = document.getElementById("new-staff-role");
+      const date = (di && di.value.trim()) || "";
+      if(!date){
+        showBackupNote("เลือกวันที่ก่อน — แตะวันที่ด้านล่าง หรือพิมพ์ในช่องวันที่");
+        if(di) di.focus();
+        return;
+      }
+      if(curStaff().some(s => s.date === date && s.name === name)){
+        showBackupNote(name + " อยู่ในวันที่ " + date + " แล้ว");
+        return;
+      }
+      const time = (ti && ti.value.trim()) || "";
+      const role = (ri && ri.value.trim()) || ROLE_MAP[name] || "";
+      staff.push({ id:"st"+Date.now()+Math.floor(Math.random()*1000), date, time, role, name, eventId: currentStaffEventId });
+      renderStaff();
+      await saveStaff();
+    });
+  });
+  const addBtn = document.getElementById("roster-add-btn");
+  if(addBtn) addBtn.addEventListener("click", async ()=>{
+    const name = await showPromptModal("เพิ่มชื่อพนักงานใหม่", "เช่น น้องมิ้นท์");
+    if(!name) return;
+    if(!staffRoster.includes(name)){ staffRoster.push(name); await saveStaffRoster(); }
+    renderStaffRoster();
+  });
+}
 const STAFF_SEED_DATA = [
   { id:"st_seed1", date:"21 ก.ค. 69", time:"21:00-24:00", name:"พี่เฟิร์ส", role:"บาริสต้า (สกัดกาแฟ)", status:"pending" },
   { id:"st_seed2", date:"21 ก.ค. 69", time:"21:00-24:00", name:"พี่น้ำแข็ง", role:"ถ่ายคอนเทนต์ / แคชเชียร์", status:"pending" },
@@ -3313,13 +3435,19 @@ function renderStaffQuickDates(){
   if(!el) return;
   const countByDate = {};
   curStaff().forEach(s => { countByDate[s.date] = (countByDate[s.date]||0)+1; });
-  el.innerHTML = EVENT_DATE_RANGE.map(d => `
-    <button class="staff-date-chip ${countByDate[d] ? 'has-people':''}" data-quickdate="${d}">${d}${countByDate[d] ? ' ('+countByDate[d]+')':''}</button>
+  const di = document.getElementById("new-staff-date");
+  const sel = (di && di.value.trim()) || "";
+  // date options: event range + any dates already used in this event
+  const used = [...new Set(curStaff().map(s=>s.date).filter(Boolean))];
+  const dates = [...new Set([...EVENT_DATE_RANGE, ...used])];
+  el.innerHTML = dates.map(d => `
+    <button class="staff-date-chip ${countByDate[d] ? 'has-people':''} ${d===sel?'sel':''}" data-quickdate="${d}">${d}${countByDate[d] ? ' ('+countByDate[d]+')':''}</button>
   `).join("");
   el.querySelectorAll("[data-quickdate]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       document.getElementById("new-staff-date").value = btn.dataset.quickdate;
-      document.getElementById("new-staff-time").focus();
+      renderStaffQuickDates();
+      renderStaffRoster();
     });
   });
 }
@@ -3552,6 +3680,7 @@ function renderStaff(){
   if(!el) return;
   renderStaffEvents();
   renderStaffQuickDates();
+  renderStaffRoster();
   renderStaffDashboard();
 
   const src = curStaff();
@@ -3674,6 +3803,10 @@ document.getElementById("new-staff-btn").addEventListener("click", async ()=>{
   inp.addEventListener("keydown", (e)=>{
     if(e.key === "Enter") document.getElementById("new-staff-btn").click();
   });
+});
+document.getElementById("new-staff-date").addEventListener("input", ()=>{
+  renderStaffRoster();
+  renderStaffQuickDates();
 });
 
 function scheduleBudgetSave(){
@@ -4479,18 +4612,9 @@ async function loadAll(){
       if(s.name === "น้องเซนต์"){ s.name = "พี่เซนต์"; migratedName = true; }
     });
 
-    const roleMap = {
-      "พี่น้ำแข็ง": "ถ่ายคอนเทนต์ / แคชเชียร์",
-      "พี่เซนต์": "บาริสต้า (ผสมเครื่องดื่ม)",
-      "น้องแสตมป์": "บาริสต้า (สกัดกาแฟ)",
-      "น้องหมวย": "บาริสต้า (สกัดกาแฟ)",
-      "น้องปลายฝน": "บาริสต้า (สกัดกาแฟ)",
-      "พี่เฟิร์ส": "บาริสต้า (สกัดกาแฟ)",
-      "พี่โจ": "แคชเชียร์ / สกัดกาแฟ"
-    };
     let migratedRole = false;
     staff.forEach(s => {
-      if(!s.role && roleMap[s.name]){ s.role = roleMap[s.name]; migratedRole = true; }
+      if(!s.role && ROLE_MAP[s.name]){ s.role = ROLE_MAP[s.name]; migratedRole = true; }
     });
 
     if(addedSeed || removedSeed || migratedTime || migratedName || migratedRole) await saveStaff();
@@ -4522,6 +4646,22 @@ async function loadAll(){
   staff.forEach(s => { if(!s.eventId){ s.eventId = "ev_seacon"; migratedEvent = true; } });
   if(migratedEvent) await saveStaff();
   if(evChanged) await saveStaffEvents();
+
+  // ---- staff roster: load, seed, and gather names from existing shifts ----
+  try{
+    const resRoster = await window.storage.get(STAFF_ROSTER_KEY, true);
+    if(resRoster && resRoster.value) staffRoster = JSON.parse(resRoster.value);
+  }catch(e){ staffRoster = staffRoster || []; }
+  let rosterChanged = false;
+  if(!staffRoster.length){
+    staffRoster = STAFF_ROSTER_SEED.slice();
+    rosterChanged = true;
+  }
+  // add any names used in shifts that aren't in the roster yet
+  staff.forEach(s => {
+    if(s.name && !staffRoster.includes(s.name)){ staffRoster.push(s.name); rosterChanged = true; }
+  });
+  if(rosterChanged) await saveStaffRoster();
 
   renderSections();
   renderTimeline();
