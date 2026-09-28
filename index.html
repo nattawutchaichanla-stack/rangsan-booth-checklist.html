@@ -2537,10 +2537,12 @@
 /* ============================================================
    STORAGE ADAPTER — makes this app work outside Claude (GitHub Pages ฯลฯ)
    • เปิดใน Claude: ใช้ระบบเดิมของ Claude อัตโนมัติ
-   • เปิดบนเว็บ/GitHub Pages: เซฟลง localStorage ในเครื่อง (ทำงานได้เลย)
-   • อยาก sync ทีมข้ามเครื่อง: วาง URL ของ Google Apps Script Web App ด้านล่าง
+   • เปิดบนเว็บ/GitHub Pages: sync ทีมผ่าน Supabase (ฐานกลาง)
+   • ถ้าฐานกลางล่ม: เซฟลง localStorage ในเครื่องอัตโนมัติ (ไม่พัง)
    ============================================================ */
-window.RANGSAN_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyPHIPdiGFBztmDaLdK_GyWh6sxJrbR7fn4gweIsbRpT2X0mrX19GJI5GGY0T6aVayUsw/exec"; // sync ทีมผ่าน Google Apps Script (ฐานกลาง)
+window.RANGSAN_SUPABASE_URL = "https://zewveugjulahoonigthb.supabase.co";
+window.RANGSAN_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpld3ZldWdqdWxhaG9vbmlndGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzI4OTEsImV4cCI6MjEwNjE0ODg5MX0.QmYfLzEi6sJ-WIPdaQuSnQ-1MKhaWbQnRPAAskMKvWA";
+window.RANGSAN_BACKEND_URL = "";  // (สำรอง) Google Apps Script — เว้นว่างไว้
 if (!window.storage) {
   const BE = () => (window.RANGSAN_BACKEND_URL || "").trim();
   const ns = (shared) => (shared ? "rgshared::" : "rglocal::");
@@ -2564,14 +2566,79 @@ if (!window.storage) {
     if (!res.ok) throw new Error("backend " + res.status);
     return await res.json();
   }
+
+  // ---- Supabase REST (kv_store table: scope, key, value) ----
+  const SB_URL = () => (window.RANGSAN_SUPABASE_URL || "").trim().replace(/\/$/, "");
+  const SB_KEY = () => (window.RANGSAN_SUPABASE_KEY || "").trim();
+  const SB = () => SB_URL() && SB_KEY();
+  const sbHead = () => ({ "apikey": SB_KEY(), "Authorization": "Bearer " + SB_KEY() });
+  const eq = encodeURIComponent;
+  async function sbGet(key, shared) {
+    const scope = shared ? "shared" : "local";
+    const url = SB_URL() + "/rest/v1/kv_store?scope=eq." + eq(scope) + "&key=eq." + eq(key) + "&select=value";
+    const res = await fetch(url, { headers: sbHead() });
+    if (!res.ok) throw new Error("sb " + res.status);
+    const rows = await res.json();
+    if (!rows.length) { const e = new Error("not found"); e.notFound = true; throw e; }
+    return { key, value: rows[0].value, shared: !!shared };
+  }
+  async function sbSet(key, value, shared) {
+    const scope = shared ? "shared" : "local";
+    const url = SB_URL() + "/rest/v1/kv_store?on_conflict=scope,key";
+    const res = await fetch(url, { method: "POST", headers: { ...sbHead(), "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify([{ scope, key, value }]) });
+    if (!res.ok) throw new Error("sb set " + res.status);
+    return { key, value, shared: !!shared };
+  }
+  async function sbDel(key, shared) {
+    const scope = shared ? "shared" : "local";
+    const url = SB_URL() + "/rest/v1/kv_store?scope=eq." + eq(scope) + "&key=eq." + eq(key);
+    const res = await fetch(url, { method: "DELETE", headers: sbHead() });
+    if (!res.ok) throw new Error("sb del " + res.status);
+    return { key, deleted: true, shared: !!shared };
+  }
+  async function sbList(prefix, shared) {
+    const scope = shared ? "shared" : "local";
+    let url = SB_URL() + "/rest/v1/kv_store?scope=eq." + eq(scope) + "&select=key";
+    if (prefix) url += "&key=like." + eq(prefix + "*");
+    const res = await fetch(url, { headers: sbHead() });
+    if (!res.ok) throw new Error("sb list " + res.status);
+    const rows = await res.json();
+    return { keys: rows.map(r => r.key), prefix: prefix || "", shared: !!shared };
+  }
+
   window.storage = {
     async get(key, shared) {
-      if (BE()) { const r = await call("get", { key, shared: !!shared }); if (r == null || r.value == null) { const e = new Error("not found"); e.notFound = true; throw e; } return r; }
+      if (SB()) {
+        try { const r = await sbGet(key, shared); try { lsSet(key, r.value, shared); } catch(e){} return r; }
+        catch (e) { if (e.notFound) throw e; return lsGet(key, shared); }
+      }
+      if (BE()) {
+        try {
+          const r = await call("get", { key, shared: !!shared });
+          if (r == null || r.value == null) { const e = new Error("not found"); e.notFound = true; throw e; }
+          try { lsSet(key, r.value, shared); } catch(e){}
+          return r;
+        } catch (e) { if (e.notFound) throw e; return lsGet(key, shared); }
+      }
       return lsGet(key, shared);
     },
-    async set(key, value, shared) { return BE() ? await call("set", { key, value, shared: !!shared }) : lsSet(key, value, shared); },
-    async delete(key, shared) { return BE() ? await call("delete", { key, shared: !!shared }) : lsDel(key, shared); },
-    async list(prefix, shared) { return BE() ? await call("list", { prefix: prefix || "", shared: !!shared }) : lsList(prefix, shared); }
+    async set(key, value, shared) {
+      try { lsSet(key, value, shared); } catch(e){}
+      if (SB()) { try { return await sbSet(key, value, shared); } catch(e){ return lsSet(key, value, shared); } }
+      if (BE()) { try { return await call("set", { key, value, shared: !!shared }); } catch(e){ return lsSet(key, value, shared); } }
+      return lsSet(key, value, shared);
+    },
+    async delete(key, shared) {
+      try { lsDel(key, shared); } catch(e){}
+      if (SB()) { try { return await sbDel(key, shared); } catch(e){ return lsDel(key, shared); } }
+      if (BE()) { try { return await call("delete", { key, shared: !!shared }); } catch(e){ return lsDel(key, shared); } }
+      return lsDel(key, shared);
+    },
+    async list(prefix, shared) {
+      if (SB()) { try { return await sbList(prefix, shared); } catch(e){ return lsList(prefix, shared); } }
+      if (BE()) { try { return await call("list", { prefix: prefix || "", shared: !!shared }); } catch(e){ return lsList(prefix, shared); } }
+      return lsList(prefix, shared);
+    }
   };
 }
 
