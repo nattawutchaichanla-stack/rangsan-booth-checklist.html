@@ -2540,7 +2540,7 @@
    • เปิดบนเว็บ/GitHub Pages: เซฟลง localStorage ในเครื่อง (ทำงานได้เลย)
    • อยาก sync ทีมข้ามเครื่อง: วาง URL ของ Google Apps Script Web App ด้านล่าง
    ============================================================ */
-window.RANGSAN_BACKEND_URL = ""; // <<< วาง URL ของ Apps Script Web App ตรงนี้เพื่อ sync ทีม (เว้นว่าง = เซฟในเครื่อง)
+window.RANGSAN_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyPHIPdiGFBztmDaLdK_GyWh6sxJrbR7fn4gweIsbRpT2X0mrX19GJI5GGY0T6aVayUsw/exec"; // sync ทีมผ่าน Google Apps Script (ฐานกลาง)
 if (!window.storage) {
   const BE = () => (window.RANGSAN_BACKEND_URL || "").trim();
   const ns = (shared) => (shared ? "rgshared::" : "rglocal::");
