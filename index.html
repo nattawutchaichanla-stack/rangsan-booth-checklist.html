@@ -1599,6 +1599,51 @@
   .todo-edit-cancel{background:var(--card-alt);color:var(--ink-soft);}
   .todo-edit-save{background:var(--sage);color:#fff;font-weight:600;}
   .todo-edit-save:hover{background:var(--sage-dark);}
+  /* ===== Checklist archive (saved records) ===== */
+  .cl-archive-row{text-align:center;margin:16px 0 10px;}
+  .cl-save-btn{
+    font-family:'Sarabun',sans-serif;font-size:13.5px;font-weight:600;
+    background:var(--sage);color:#fff;border:none;border-radius:999px;
+    padding:11px 22px;cursor:pointer;box-shadow:var(--shadow-sm);
+  }
+  .cl-save-btn:hover{background:var(--sage-dark);}
+  .cl-archive-list{margin-top:8px;}
+  .cl-archive-head{
+    font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.03em;
+    color:var(--ink);margin:14px 0 8px;
+  }
+  .cl-arch-card{
+    background:var(--card);border:1px solid rgba(28,27,25,0.1);
+    border-radius:10px;margin-bottom:8px;overflow:hidden;
+  }
+  .cl-arch-card.full{border-color:var(--sage);}
+  .cl-arch-row{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;}
+  .cl-arch-info{flex:1;min-width:0;}
+  .cl-arch-title{font-family:'Sarabun',sans-serif;font-size:14px;font-weight:600;color:var(--ink);}
+  .cl-arch-date{font-family:'Sarabun',sans-serif;font-size:11.5px;color:var(--muted);}
+  .cl-arch-badge{
+    font-family:'Courier Prime',monospace;font-size:12px;white-space:nowrap;
+    background:var(--card-alt);color:var(--ink-soft);border-radius:999px;padding:4px 11px;
+  }
+  .cl-arch-badge.full{background:var(--sage);color:#fff;}
+  .cl-arch-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;opacity:.6;padding:2px 4px;}
+  .cl-arch-del:hover{color:var(--stamp);opacity:1;}
+  .cl-arch-chev{color:var(--muted);transition:transform .15s;}
+  .cl-arch-card.open .cl-arch-chev{transform:rotate(180deg);}
+  .cl-arch-detail{padding:4px 16px 14px;border-top:1px solid rgba(28,27,25,0.06);}
+  .cl-arch-sec{font-family:'Sarabun',sans-serif;font-size:12.5px;font-weight:700;color:var(--sage-dark);margin:10px 0 5px;}
+  .cl-arch-item{font-family:'Sarabun',sans-serif;font-size:13px;color:var(--muted);padding:2px 0;}
+  .cl-arch-item.done{color:var(--ink);}
+  .cl-arch-item span{display:inline-block;width:16px;color:var(--sage);}
+  .cl-arch-item b{font-family:'Courier Prime',monospace;font-weight:400;color:var(--ink-soft);}
+  .clpick-options{display:flex;flex-direction:column;gap:8px;margin:14px 0 8px;}
+  .clpick-opt{
+    font-family:'Sarabun',sans-serif;font-size:14px;color:var(--ink);text-align:left;
+    background:var(--card-alt);border:2px solid transparent;border-radius:10px;
+    padding:11px 14px;cursor:pointer;transition:all .12s;
+  }
+  .clpick-opt:hover{border-color:var(--sage-soft);}
+  .clpick-opt.sel{background:var(--sage);color:#fff;border-color:var(--sage);}
 </style>
 </head>
 <body>
@@ -1662,11 +1707,12 @@
       </div>
     </div>
 
-    <div class="cl-groups-wrap">
-      <div id="cl-groups-bar" class="cl-groups-bar"></div>
-    </div>
-
     <div id="sections"></div>
+
+    <div class="cl-archive-row">
+      <button id="cl-save-btn" class="cl-save-btn">💾 บันทึกเก็บเช็คลิสต์กลุ่มนี้ (ทำเสร็จแล้ว)</button>
+    </div>
+    <div id="cl-archive-list" class="cl-archive-list"></div>
 
     <div class="add-section-card">
       <input type="text" id="new-section-input" placeholder="ชื่อหัวข้อใหม่ เช่น อุปกรณ์เสริมพิเศษ...">
@@ -2505,6 +2551,18 @@
   </div>
 </div>
 
+<div id="clpick-overlay" class="confirm-overlay" style="display:none;">
+  <div class="confirm-box">
+    <div class="confirm-msg">บันทึกเช็คลิสต์นี้เป็นของโครงการไหน?</div>
+    <div id="clpick-options" class="clpick-options"></div>
+    <input type="text" id="clpick-custom" class="prompt-input" placeholder="หรือพิมพ์ชื่อโครงการใหม่...">
+    <div class="confirm-actions">
+      <button id="clpick-cancel-btn" class="confirm-btn cancel">ยกเลิก</button>
+      <button id="clpick-ok-btn" class="confirm-btn ok">✓ ยืนยันบันทึก</button>
+    </div>
+  </div>
+</div>
+
 <div id="pdf-preview-overlay" class="confirm-overlay" style="display:none;">
   <div class="pdf-preview-box">
     <div class="pdf-preview-scroll">
@@ -2643,12 +2701,40 @@ if (!window.storage) {
 }
 
 const BASE_DATA = [
+  { id:"scge_equip", title:"SCG อีเวนต์ 30 ก.ย. · อุปกรณ์ไฟฟ้า (Work Permit)", items:[
+    "เครื่องชง VBM LOLLO — 1 เครื่อง (3,250W)",
+    "เครื่องบด — 2 เครื่อง (1,450W)",
+    "เครื่องตีฟองนม — 1 (370W)",
+    "ปลั๊กพ่วง — 1 (1,500W)",
+    "เครื่องปั่น — 1 (1,000W)",
+    "เครื่องบดตัวเล็ก — 1 (700W)",
+    "เครื่อง POS + ปริ้น — 1 (400W)",
+    "สายชาร์จมือถือ — 1 (45W)",
+    "⚡ รวมกำลังไฟ ~8,715W — แจ้งผู้จัด/เช็กปลั๊กให้พอ"
+  ]},
+  { id:"scge_material", title:"SCG อีเวนต์ · วัตถุดิบ (250 แก้ว · เตรียม 275)", items:[
+    "เมล็ดกาแฟ (สำหรับชง) — 4 กก.",
+    "นมสด — 18 ลิตร",
+    "น้ำแข็ง — 50 กก.",
+    "ผงชาไทย / ใบชา — 0.5 กก.",
+    "ผงมัทฉะ — 60 ก.",
+    "ผงโกโก้ — 200 ก."
+  ]},
+  { id:"scge_pack", title:"SCG อีเวนต์ · บรรจุภัณฑ์ & อื่นๆ", items:[
+    "แก้ว — 300 ใบ",
+    "ฝาแก้ว — 300 ใบ",
+    "หลอด — 250 อัน",
+    "ทิชชู่ / ไม้คน — 1 แพคใหญ่",
+    "น้ำดื่ม / น้ำกรอง — 25 ลิตร",
+    "ไซรัป (ตามเมนู) — 1 ชุด",
+    "น้ำเชื่อม — 2.5 ลิตร",
+    "เลม่อน / ผลไม้ — 20 ลูก"
+  ]},
   { id:"tr_machine", title:"เทรนนิ่ง 30 ส.ค. · เครื่องมือหลัก", items:[
     "เครื่องชงกาแฟ VBM LOLLO (2G) — 1",
     "เครื่องบด Zentis P-64 — 1",
     "เครื่องบด Single Dose DF83 — 1",
     "เครื่องบด December — 1",
-    "เครื่องตีฟองนม — 1",
     "เครื่องชั่งสกัดกาแฟ — 1",
     "เครื่องชั่งดิจิตอล Zentis Coffee Smart Pro 2 kg. — 1",
     "เครื่องชั่ง Coffee Scale 3 kg. — 1",
@@ -2673,34 +2759,19 @@ const BASE_DATA = [
     "เอกสารสูตรเมนู + เช็คลิสต์ — 1"
   ]},
   { id:"tr_extra", title:"เทรนนิ่ง 30 ส.ค. · เบ็ดเตล็ด", items:[
-    "ปลั๊กพ่วง — 1",
     "สายชาร์จ / อะแดปเตอร์ — 1 ชุด",
     "ถังน้ำ — 3",
     "ถังขยะ + ถุงดำ — 1",
     "กระดาษทิชชู่ — 1",
     "ชุดอุปกรณ์ช่าง (ไขควง/ประแจ) — 1"
   ]},
-  { id:"tc_material", title:"Talad Chic 4 วัน · วัตถุดิบหลัก (เตรียม ~489 แก้ว)", items:[
-    "เมล็ดกาแฟ (สำหรับชง) — 6.7 กก.",
-    "นมสด — 28 ลิตร",
-    "น้ำแข็ง — 80 กก.",
-    "ผงชาไทย / ใบชา — 1 กก.",
-    "ผงมัทฉะ — 100 ก.",
-    "ผงโกโก้ — 345 ก."
-  ]},
   { id:"tc_pack", title:"Talad Chic 4 วัน · บรรจุภัณฑ์", items:[
     "แก้วพลาสติก / กระดาษ — 550 ใบ",
-    "ฝาแก้ว — 550 ใบ",
-    "หลอด — 450 อัน",
-    "ถุงหิ้ว / ถุงร้อน — 250 ใบ",
-    "ทิชชู่ / ไม้คน — 1 แพคใหญ่"
+    "ถุงหิ้ว / ถุงร้อน — 250 ใบ"
   ]},
   { id:"tc_other", title:"Talad Chic 4 วัน · อื่นๆ", items:[
-    "น้ำดื่ม / น้ำกรอง — 44 ลิตร",
     "ไซรัป (คาราเมล / ส้ม / หล่อฮังก๊วย) — 1 ชุดครบ",
-    "น้ำเชื่อม — 4.2 ลิตร",
-    "นมข้นหวาน / นมข้นจืด — 2-3 ถุง",
-    "เลม่อน / ผลไม้ — 8 ลูก"
+    "นมข้นหวาน / นมข้นจืด — 2-3 ถุง"
   ]},
   { id:"hs_tools", title:"ห้องสอน · เครื่องมือ / เครื่องใช้ไฟฟ้า", items:[
     "เครื่องคัดเมล็ดกันชัก — 1",
@@ -2710,14 +2781,7 @@ const BASE_DATA = [
     "แทปเลต — 1",
     "โน้ตบุ๊ค — 1",
     "กล้องวีดีโอ — 1",
-    "แท่นวางไอแพด — 1",
     "เครื่องชงกาแฟ — 1",
-    "ปั๊มน้ำ + ตัวแก้ว — 1",
-    "เครื่องตีฟองนม — 2",
-    "เครื่องบด Zentis P-64 — 1",
-    "เครื่องบด Single Dose DF83 — 1",
-    "เครื่องบด December — 1",
-    "เครื่องชั่งสกัดกาแฟ — 1",
     "เครื่องชั่งตัวใหญ่ — 1",
     "เครื่องชั่งตัวเล็ก — 1",
     "ตราชั่งเล็ก — 2"
@@ -2730,7 +2794,6 @@ const BASE_DATA = [
     "ป้ายเมนูสแกน QR โค้ด — (ระบุจำนวน)",
     "ป้ายราคากาแฟ — 4",
     "ถาดรองวางแก้ว — 1",
-    "ถังน้ำ — 5",
     "รถเข็น — 1",
     "รถเข็นตัวเล็ก — 1"
   ]},
@@ -2738,12 +2801,9 @@ const BASE_DATA = [
     "ปลั๊ก — 3",
     "ชุดอุปกรณ์ช่าง — 1",
     "พันเทป — 1",
-    "ผงล้างเครื่อง — 1",
     "กล่องทิชชู่ — 1",
     "กรรไกร — 1",
     "เข็มเกลียว — 1",
-    "แทมป์สปริง — 1",
-    "แผ่นรองแทมป์ — 2",
     "แผ่นรอง — 3",
     "ที่วางหลอด — 1",
     "ที่ตัก — 2",
@@ -2800,17 +2860,13 @@ const BASE_DATA = [
   { id:"scg_powder", title:"SCG · ชา / มัทฉะ / โกโก้ (วัตถุดิบผง)", items:[
     "ถุงชาไทย 500 กรัม — 3 ถุง",
     "กระปุกชาไทย — 1 กระปุก",
-    "กระปุกชาจีนมะลิ — 1",
     "โกโก้ 500 กรัม — 3",
-    "กระปุกโกโก้ — 1 กระปุก",
-    "กระปุกมัทฉะ — 1 กระปุก",
     "กระปุกมัทฉะพรีเมียม — 1",
     "กล่องรังผึ้ง — 1 กระปุก",
     "กระปุกผงนัว — 1 กระปุก"
   ]},
   { id:"scg_syrup", title:"SCG · ไซรัป / ซอส / น้ำหวาน", items:[
     "ไซรัปหอมกลิ่นอาย — 1",
-    "ไซรัปส้ม — 1",
     "ไซรัปคาราเมล — 1",
     "ไซรัปน้ำเชื่อมหล่อฮังก๊วย — 1",
     "ขวดน้ำเชื่อม — 1",
@@ -2831,12 +2887,10 @@ const BASE_DATA = [
     "นมข้นหวาน — 2 ถุง",
     "ขวดนมผสม — 1 ขวด",
     "นมข้นจืด Falcon (ตีฟอง) — 1",
-    "กล่องน้ำส้ม — 1",
     "เลม่อน — 5 ลูก"
   ]},
   { id:"scg_pack", title:"SCG · บรรจุภัณฑ์ / ของใช้สิ้นเปลือง", items:[
     "ฝาโดม — 3",
-    "ฝายกดื่ม — 7",
     "ถุงเดี่ยว — 1",
     "ถุงคู่ — 2",
     "หลอดช้อนตัก — 1 แพค",
@@ -2847,25 +2901,21 @@ const BASE_DATA = [
     "ถุงน้ำตาลทราย — 1 ถุง"
   ]},
   { id:"scg_cups", title:"SCG · แก้ว / ภาชนะ", items:[
-    "แก้ว — 1",
     "แก้วชิม — 1",
     "แก้วร้อน — 2",
     "ฝาแก้วร้อน — 1",
-    "แก้ว — 8 แถว",
     "กระป๋องผสมนม — 1 ใบ",
     "กระป๋องน้ำเปล่า — 1"
   ]},
   { id:"scg_tools", title:"SCG · อุปกรณ์ / เครื่องมือ", items:[
-    "ถังน้ำ — 1",
     "ป้ายสติ๊กเกอร์เป๊ะโน้ตแก้ว — 1",
     "ปั๊มตรายาง — 1",
     "ผ้าเช็ด — 2",
     "อโรม่า — 7",
     "ตะกร้อ — 1 อัน",
-    "กรรไกร — 1",
     "ที่หนีบกาแฟ — 1",
     "เครื่องชั่ง — (ระบุจำนวน)"
-  ]}
+  ]},
 ].map(s => ({...s, items: s.items.map((label,i)=>({id: s.id+"_"+i, label}))}));
 
 const CATALOG_IMG = {
@@ -3058,10 +3108,37 @@ const TL_TALADCHIC_BLOCKS = [
     ]}
 ];
 
+const TL_SCG2026_SEED_KEY = "rangsan-booth-tl-scg2026-seeded-v1";
+const TL_SCG2026_BLOCKS = [
+  { id:"scg26_setup", time:"09:00", title:"Set up · เข้าจัดร้าน",
+    items:[
+      {id:"scg26_s1", label:"เข้าพื้นที่ set up ตั้งบูธ/จัดร้าน ตั้งแต่ 09:00 น."},
+      {id:"scg26_s2", label:"สถานที่: SCG บางซื่อ · อาคารอเนกประสงค์ Hall 1-3 ชั้น 10 (Lunch in the Park L3)"}
+    ]},
+  { id:"scg26_ready", time:"11:30", title:"พร้อมเสิร์ฟ",
+    items:[
+      {id:"scg26_r1", label:"เครื่องดื่มพร้อมเสิร์ฟ ช่วง 11:30–13:00 น."},
+      {id:"scg26_r2", label:"เตรียม 250 แก้ว · เช็กวัตถุดิบ/น้ำแข็งให้พร้อม"}
+    ]},
+  { id:"scg26_open", time:"12:00", title:"เริ่มให้บริการ",
+    items:[{id:"scg26_o1", label:"ช่วงงานประมาณ 12:00–16:00 น."}]},
+  { id:"scg26_start", time:"13:00", title:"⭐ งานเริ่มตรง 13:00",
+    items:[{id:"scg26_st1", label:"งานเริ่ม 13:00 ตรง — เตรียมพร้อมรับคน (ช่วงพีค)"}]},
+  { id:"scg26_end", time:"16:00", title:"จบงาน · เก็บบูธ",
+    items:[{id:"scg26_e1", label:"งานจบประมาณ 16:00 น. → เก็บของ"}]},
+  { id:"scg26_info", time:"ข้อมูล", title:"รายละเอียดงาน",
+    items:[
+      {id:"scg26_i1", label:"จำนวน: 250 แก้ว"},
+      {id:"scg26_i2", label:"ผู้จัดงาน: SCG Distribution"},
+      {id:"scg26_i3", label:"ติดต่อ: พี่โจ"},
+      {id:"scg26_i4", label:"วันพุธที่ 30 ก.ย. 2569"}
+    ]}
+];
 const TL_PROJECTS_SEED = [
   { id:"tl_seacon", name:"Seacon Bangkae · เซ็ตอัพ", date:"22 ก.ค. – 2 ส.ค. 2569", archived:false },
   { id:"tl_taladchic", name:"Talad Chic (4 วัน)", date:"(ระบุวันที่จัดงาน)", archived:false },
-  { id:"tl_training", name:"เทรนนิ่ง 30 ส.ค.", date:"30 ส.ค. 2569", archived:false }
+  { id:"tl_training", name:"เทรนนิ่ง 30 ส.ค.", date:"30 ส.ค. 2569", archived:false },
+  { id:"tl_scg2026", name:"SCG Dealer Communication 2026", date:"30 ก.ย. 2569", archived:false }
 ];
 function emptyTlData(){ return { extraItems:{}, customBlocks:[], removedIds:[] }; }
 function curTlProject(){ return tlProjects.find(p => p.id === currentTlProjectId) || null; }
@@ -3088,7 +3165,8 @@ let currentStaffEventId = null;
 const STAFF_EVENTS_SEED = [
   { id:"ev_seacon", name:"Seacon Bangkae (22 ก.ค.–2 ส.ค.)" },
   { id:"ev_taladchic", name:"Talad Chic (4 วัน)" },
-  { id:"ev_training", name:"เทรนนิ่ง 30 ส.ค." }
+  { id:"ev_training", name:"เทรนนิ่ง 30 ส.ค." },
+  { id:"ev_scg2026", name:"SCG Dealer Communication 2026" }
 ];
 function curStaff(){ return staff.filter(s => (s.eventId || "ev_seacon") === currentStaffEventId); }
 let staffRoster = [];
@@ -3192,7 +3270,12 @@ const STAFF_SEED_DATA = [
   { id:"st_seed36", date:"2 ส.ค. 69", time:"09:00-20:30", name:"น้องแสตมป์", role:"บาริสต้า (สกัดกาแฟ)", status:"pending" },
   { id:"st_seed37", date:"2 ส.ค. 69", time:"09:00-20:30", name:"พี่น้ำแข็ง", role:"ถ่ายคอนเทนต์ / แคชเชียร์", status:"pending" },
   { id:"st_seed38", date:"2 ส.ค. 69", time:"09:00-20:30", name:"น้องหมวย", role:"บาริสต้า (สกัดกาแฟ)", status:"pending" },
-  { id:"st_seed39", date:"22 ก.ค. 69", time:"09:30-12:00", name:"พี่น้ำแข็ง", role:"ถ่ายคอนเทนต์ / แคชเชียร์", status:"pending" }
+  { id:"st_seed39", date:"22 ก.ค. 69", time:"09:30-12:00", name:"พี่น้ำแข็ง", role:"ถ่ายคอนเทนต์ / แคชเชียร์", status:"pending" },
+  { id:"st_scg1", eventId:"ev_scg2026", date:"30 ก.ย. 69", time:"08:00-16:00", name:"หมวย ชิงถาว", role:"บาริสต้า", status:"pending" },
+  { id:"st_scg2", eventId:"ev_scg2026", date:"30 ก.ย. 69", time:"08:00-16:00", name:"ปลายฝน ชัยสงคาม", role:"บาริสต้า", status:"pending" },
+  { id:"st_scg3", eventId:"ev_scg2026", date:"30 ก.ย. 69", time:"08:00-16:00", name:"กิตติกวิน พลายด้วง", role:"บาริสต้า", status:"pending" },
+  { id:"st_scg4", eventId:"ev_scg2026", date:"30 ก.ย. 69", time:"08:00-16:00", name:"ธนวัฒ ญาติมิ", role:"Editor (ถ่าย/ตัดต่อคอนเทนต์)", status:"pending" },
+  { id:"st_scg5", eventId:"ev_scg2026", date:"30 ก.ย. 69", time:"08:00-16:00", name:"ณัฐวุฒิ ไชยจันลา", role:"ผู้ควบคุมงาน (Job Controller)", status:"pending" }
 ];
 const STAFF_SEED_REMOVE_IDS = ["st_seed30","st_seed31","st_seed32","st_seed26"];
 
@@ -3370,12 +3453,15 @@ function buildSections(){
 }
 
 const CL_GROUP_KEY = "rangsan-booth-cl-group-v1";
+const CL_ARCHIVE_KEY = "rangsan-booth-cl-archive-v1";
+let clArchive = [];
 let clGroup = "tr";  // default: show upcoming training group
 const CL_GROUPS = [
   { id:"tr",  label:"🎓 เทรนนิ่ง",  prefix:"tr_" },
   { id:"tc",  label:"🎯 Talad Chic", prefix:"tc_" },
   { id:"hs",  label:"📚 ห้องสอน",    prefix:"hs_" },
   { id:"scg", label:"🏢 SCG",        prefix:"scg_" },
+  { id:"scge", label:"🎪 SCG อีเวนต์", prefix:"scge_" },
   { id:"other", label:"➕ อื่นๆ",     prefix:"__other__" },
   { id:"all", label:"ทั้งหมด",       prefix:"" }
 ];
@@ -3383,12 +3469,144 @@ function sectionGroup(id){
   if(id.indexOf("tr_")===0) return "tr";
   if(id.indexOf("tc_")===0) return "tc";
   if(id.indexOf("hs_")===0) return "hs";
+  if(id.indexOf("scge_")===0) return "scge";
   if(id.indexOf("scg_")===0) return "scg";
   return "other";
 }
 async function saveClGroup(){
   try{ await window.storage.set(CL_GROUP_KEY, clGroup, false); }catch(e){}
 }
+async function saveClArchive(){
+  await setStorageWithRetry(CL_ARCHIVE_KEY, JSON.stringify(clArchive), "บันทึกเช็คลิสต์");
+}
+
+function groupLabelById(gid){
+  const g = CL_GROUPS.find(x => x.id === gid);
+  return g ? g.label.replace(/^[^ ]+ /,"") : gid;
+}
+
+function showChecklistProjectPicker(){
+  return new Promise((resolve)=>{
+    const overlay = document.getElementById("clpick-overlay");
+    const optsEl = document.getElementById("clpick-options");
+    const custom = document.getElementById("clpick-custom");
+    const okBtn = document.getElementById("clpick-ok-btn");
+    const cancelBtn = document.getElementById("clpick-cancel-btn");
+    let names = (typeof tlProjects !== "undefined" && tlProjects.length)
+      ? tlProjects.filter(p=>!p.archived).map(p=>p.name)
+      : [];
+    if(!names.length) names = ["Seacon Bangkae","Talad Chic","เทรนนิ่ง","SCG Dealer Communication 2026"];
+    let picked = null;
+    custom.value = "";
+    optsEl.innerHTML = names.map(n => `<button class="clpick-opt" data-clpick="${escapeAttr(n)}">${escapeHtml(n)}</button>`).join("");
+    overlay.style.display = "flex";
+    optsEl.querySelectorAll("[data-clpick]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        picked = b.dataset.clpick; custom.value = "";
+        optsEl.querySelectorAll(".clpick-opt").forEach(x=>x.classList.remove("sel"));
+        b.classList.add("sel");
+      });
+    });
+    custom.addEventListener("input", ()=>{ if(custom.value.trim()){ picked = null; optsEl.querySelectorAll(".clpick-opt").forEach(x=>x.classList.remove("sel")); } });
+    function cleanup(result){
+      overlay.style.display = "none";
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onOk(){
+      const name = (custom.value.trim()) || picked;
+      if(!name){ showBackupNote("เลือกหรือพิมพ์ชื่อโครงการก่อน"); return; }
+      cleanup(name);
+    }
+    function onCancel(){ cleanup(null); }
+    function onOverlay(e){ if(e.target === overlay) cleanup(null); }
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
+
+async function saveChecklistSnapshot(){
+  const secs = buildSections();
+  const snap = { sections: [], total: 0, done: 0 };
+  secs.forEach(s => {
+    const items = s.items.map(it => {
+      const parts = it.label.split(" — ");
+      const nm = (itemNames[it.id] !== undefined) ? itemNames[it.id] : parts[0];
+      const parsedQty = parts.length > 1 ? parts.slice(1).join(" — ") : "";
+      const qty = (itemQtys[it.id] !== undefined) ? itemQtys[it.id] : parsedQty;
+      const ck = !!checked[it.id];
+      snap.total++; if(ck) snap.done++;
+      return { name: nm, qty, checked: ck };
+    });
+    snap.sections.push({ title: s.title, items });
+  });
+  if(!snap.total){ showBackupNote("ยังไม่มีรายการในเช็คลิสต์"); return; }
+  const project = await showChecklistProjectPicker();
+  if(!project) return;
+  const now = new Date();
+  const rec = {
+    id: "clrec_" + Date.now(),
+    date: now.toLocaleDateString("th-TH", {day:"numeric", month:"long", year:"numeric"}) + " " + now.toLocaleTimeString("th-TH", {hour:"2-digit", minute:"2-digit"}),
+    ts: now.toISOString(),
+    group: project,
+    total: snap.total, done: snap.done,
+    pct: Math.round((snap.done/snap.total)*100),
+    sections: snap.sections
+  };
+  clArchive.unshift(rec);
+  await saveClArchive();
+  renderClArchive();
+  showBackupNote("บันทึกเก็บเช็คลิสต์ โครงการ " + rec.group + " แล้ว 📦 (" + rec.done + "/" + rec.total + ")");
+}
+
+function renderClArchive(){
+  const el = document.getElementById("cl-archive-list");
+  if(!el) return;
+  const btn = document.getElementById("cl-save-btn");
+  if(btn) btn.textContent = "💾 บันทึกเก็บเช็คลิสต์ \"" + (clGroup==="all"?"ทั้งหมด":groupLabelById(clGroup)) + "\" (ทำเสร็จแล้ว)";
+  if(!clArchive.length){ el.innerHTML = ""; return; }
+  el.innerHTML = '<div class="cl-archive-head">📦 เช็คลิสต์ที่บันทึกไว้ (' + clArchive.length + ')</div>' +
+    clArchive.map(r => `
+      <div class="cl-arch-card ${r.pct===100?'full':''}">
+        <div class="cl-arch-row" data-archtoggle="${r.id}">
+          <div class="cl-arch-info">
+            <div class="cl-arch-title">${escapeHtml(r.group)}</div>
+            <div class="cl-arch-date">${escapeHtml(r.date)}</div>
+          </div>
+          <div class="cl-arch-badge ${r.pct===100?'full':''}">${r.done}/${r.total} · ${r.pct}%</div>
+          <button class="cl-arch-del" data-archdel="${r.id}" title="ลบบันทึก">✕</button>
+          <span class="cl-arch-chev">▾</span>
+        </div>
+        <div class="cl-arch-detail" id="archdetail-${r.id}" style="display:none;">
+          ${r.sections.map(s => `
+            <div class="cl-arch-sec">${escapeHtml(s.title)}</div>
+            ${s.items.map(it => `<div class="cl-arch-item ${it.checked?'done':''}"><span>${it.checked?'✓':'○'}</span> ${escapeHtml(it.name)}${it.qty?` <b>${escapeHtml(it.qty)}</b>`:''}</div>`).join("")}
+          `).join("")}
+        </div>
+      </div>`).join("");
+  el.querySelectorAll("[data-archtoggle]").forEach(row=>{
+    row.addEventListener("click",(e)=>{
+      if(e.target.closest("[data-archdel]")) return;
+      const d = document.getElementById("archdetail-" + row.dataset.archtoggle);
+      const card = row.closest(".cl-arch-card");
+      if(d){ const open = d.style.display !== "none"; d.style.display = open ? "none":"block"; card.classList.toggle("open", !open); }
+    });
+  });
+  el.querySelectorAll("[data-archdel]").forEach(b=>{
+    b.addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      const ok = await showConfirmModal("ลบบันทึกเช็คลิสต์นี้?");
+      if(!ok) return;
+      clArchive = clArchive.filter(r => r.id !== b.dataset.archdel);
+      await saveClArchive();
+      renderClArchive();
+    });
+  });
+}
+
 function renderClGroups(){
   const bar = document.getElementById("cl-groups-bar");
   if(!bar) return;
@@ -3428,8 +3646,8 @@ function renderClGroups(){
 
 function renderSections(){
   const allSections = buildSections();
-  renderClGroups();
-  const sections = (clGroup === "all") ? allSections : allSections.filter(s => sectionGroup(s.id) === clGroup);
+  renderClArchive();
+  const sections = allSections;
   const container = document.getElementById("sections");
   container.innerHTML = "";
   let totalItems = 0, totalChecked = 0, sectionsDone = 0;
@@ -3610,6 +3828,7 @@ document.getElementById("new-section-btn").addEventListener("click", ()=>{
 document.getElementById("new-section-input").addEventListener("keydown", (e)=>{
   if(e.key === "Enter") document.getElementById("new-section-btn").click();
 });
+document.getElementById("cl-save-btn").addEventListener("click", ()=>{ saveChecklistSnapshot(); });
 
 document.getElementById("new-tl-btn").addEventListener("click", ()=>{
   const timeInput = document.getElementById("new-tl-time");
@@ -5249,6 +5468,18 @@ async function loadAll(){
     try{ await window.storage.set(TL_TALADCHIC_SEED_KEY, "done", true); }catch(e){}
     if(currentTlProjectId === "tl_taladchic") tlCustom = tlDataAll["tl_taladchic"];
   }
+  // seed SCG Dealer Communication 2026 once
+  let scg26Seeded = false;
+  try{ const rs = await window.storage.get(TL_SCG2026_SEED_KEY, true); scg26Seeded = rs && rs.value === "done"; }catch(e){ scg26Seeded = false; }
+  if(!scg26Seeded){
+    if(!tlDataAll["tl_scg2026"]) tlDataAll["tl_scg2026"] = emptyTlData();
+    if(!tlDataAll["tl_scg2026"].customBlocks || !tlDataAll["tl_scg2026"].customBlocks.length){
+      tlDataAll["tl_scg2026"].customBlocks = JSON.parse(JSON.stringify(TL_SCG2026_BLOCKS));
+      tlChanged = true;
+    }
+    try{ await window.storage.set(TL_SCG2026_SEED_KEY, "done", true); }catch(e){}
+    if(currentTlProjectId === "tl_scg2026") tlCustom = tlDataAll["tl_scg2026"];
+  }
   if(tlChanged){ await saveTlProjects(); await saveTlCustom(); }
   try{
     const res4 = await window.storage.get(HISTORY_KEY, true);
@@ -5324,6 +5555,10 @@ async function loadAll(){
     const resClg = await window.storage.get(CL_GROUP_KEY, false);
     if(resClg && resClg.value) clGroup = resClg.value;
   }catch(e){ /* keep default */ }
+  try{
+    const resCla = await window.storage.get(CL_ARCHIVE_KEY, true);
+    if(resCla && resCla.value) clArchive = JSON.parse(resCla.value);
+  }catch(e){ clArchive = clArchive || []; }
   try{
     const res7 = await window.storage.get(ITEM_QTYS_KEY, true);
     if(res7 && res7.value) itemQtys = JSON.parse(res7.value);
